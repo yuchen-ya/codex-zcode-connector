@@ -10,6 +10,7 @@ import { PROVIDER_ALIASES } from '../lib/model-options.js'
 
 const execute = promisify(execFile)
 const config = loadConfig()
+assert.ok(config.workspace, 'Set ZCODE_WORKSPACE to an authorized test directory')
 const cli = join(PROJECT_ROOT, 'cli.mjs')
 const results = []
 

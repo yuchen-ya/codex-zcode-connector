@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
 import { loadConfig } from '../lib/config.js'
 
 const config = loadConfig()
+if (!config.workspace) throw new Error('Specify --workspace ABSOLUTE_PATH or ZCODE_WORKSPACE before launching ZCode')
+if (!statSync(config.workspace).isDirectory()) throw new Error('Workspace must be an existing directory')
 const executable = process.env.ZCODE_EXE ?? join(process.env.LOCALAPPDATA, 'Programs', 'ZCode', 'ZCode.exe')
 if (!existsSync(executable)) throw new Error(`ZCode executable not found: ${executable}. Set ZCODE_EXE for a custom installation.`)
 const occupied = await new Promise((resolve, reject) => {
@@ -14,7 +16,6 @@ const occupied = await new Promise((resolve, reject) => {
 })
 if (occupied) throw new Error(`Port ${config.debugPort} is already in use. Close the old debug instance explicitly or select another ZCODE_DEBUG_PORT.`)
 
-mkdirSync(config.workspace, { recursive: true })
 const profile = config.profileDir
 mkdirSync(profile, { recursive: true })
 const child = spawn(executable, [

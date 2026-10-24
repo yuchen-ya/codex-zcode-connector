@@ -5,12 +5,20 @@ Codex 委派 ZCode 执行任务，接收提问、授权和结果。Windows · No
 ## 安装
 
 ```powershell
-npm install -g https://github.com/yuchen-ya/codex-zcode-connector/releases/download/v0.4.1/codex-zcode-connector-0.4.1.tgz
+npm install -g https://github.com/yuchen-ya/codex-zcode-connector/releases/download/v0.5.0/codex-zcode-connector-0.5.0.tgz
 codex-zcode install
-codex-zcode launch
+codex-zcode launch --workspace 'E:\your-project'
 ```
 
-重载 Codex，说“让 ZCode 检查当前项目”。默认临时工作区；指定项目先设置 `$env:ZCODE_WORKSPACE = 'E:\your-project'`。端口占用时先退出旧调试实例。
+重载 Codex，说“让 ZCode 检查当前项目”。端口占用时先退出旧调试实例。
+
+```powershell
+codex-zcode workspaces
+codex-zcode delegate --workspace 'E:\your-project' '检查这个项目'
+codex-zcode wait TASK_ID --json
+```
+
+必须指定工作区（`--workspace` 或 `ZCODE_WORKSPACE`），无临时目录默认值。仅支持已在 ZCode 登记的本地项目；发送前切换并核对路径，忙碌任务或未发送草稿会阻止提交。任务回执含工作区，等待和回复绑定原任务。
 
 ## 模型
 

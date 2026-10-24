@@ -44,30 +44,35 @@ async function call(name, args = {}) {
 }
 
 try {
-  const initialized = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex-zcode-smoke', version: '0.4.1' } })
+  const initialized = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex-zcode-smoke', version: '0.5.0' } })
   assert.equal(initialized.serverInfo.name, 'codex-zcode-connector')
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
   const tools = await request('tools/list')
-  assert.deepEqual(tools.tools.map(t => t.name), ['zcode_status', 'zcode_runs', 'zcode_models', 'zcode_select_model', 'zcode_ask', 'zcode_task'])
+  assert.deepEqual(tools.tools.map(t => t.name), ['zcode_workspaces', 'zcode_status', 'zcode_runs', 'zcode_models', 'zcode_select_model', 'zcode_ask', 'zcode_task'])
   const status = await call('zcode_status')
   console.log(status.content[0].text)
-  const runs = await call('zcode_runs', { limit: 3 })
-  console.log(`Background snapshot: ${runs.structuredContent.agents.length} agent records returned`)
+  const workspaces = await call('zcode_task', { action: 'workspaces' })
+  console.log(`Workspaces: ${workspaces.structuredContent.workspaces.length} local projects`)
+  if (config.workspace) {
+    const runs = await call('zcode_runs', { workspace: config.workspace, limit: 3 })
+    console.log(`Background snapshot: ${runs.structuredContent.agents.length} agent records returned`)
+  }
   if (process.argv.includes('--ask')) {
     assert.equal(status.structuredContent.cdp.reachable, true, 'Start the ZCode debug instance first')
+    assert.ok(config.workspace, 'Set ZCODE_WORKSPACE to an authorized test directory')
     const name = `.codex-zcode-smoke-${randomUUID()}.txt`
     const path = join(config.workspace, name)
     const expected = `CODEX_ZCODE_${randomUUID()}`
     writeFileSync(path, expected, { flag: 'wx' })
     try {
-      const result = await call('zcode_ask', { prompt: `连接验证：只使用 Read 工具读取当前项目根目录的 ${name}，逐字回复文件内容。禁止其他工具、子智能体、网络、电脑操作和修改文件。` })
+      const result = await call('zcode_ask', { workspace: config.workspace, prompt: `连接验证：只使用 Read 工具读取当前项目根目录的 ${name}，逐字回复文件内容。禁止其他工具、子智能体、网络、电脑操作和修改文件。` })
       assert.equal(result.structuredContent.reply, expected)
       console.log('PASS: ZCode read the workspace challenge and returned its exact contents through MCP')
     } finally {
       unlinkSync(path)
     }
   }
-  console.log('PASS: stdio MCP handshake, tool scope, status and background records')
+  console.log('PASS: stdio MCP handshake, tool scope, status and workspace discovery')
 } finally {
   child.stdin.end()
   rejectPending(new Error('Smoke test finished'))

@@ -8,23 +8,25 @@ import { installConnector, uninstallConnector } from './lib/install.js'
 const HELP = `codex-zcode - operate ZCode through local CDP
 
 Usage: node cli.mjs <command> [options]
+  workspaces                      List local ZCode projects and current workspace
   status [--quota]                 Local connection; optional cached quota, no account identity
   runs [--limit 15]               Current workspace's connector task records
   models                          Current selection and available providers/models
   select [--provider NAME] [--model ID] [--effort max]
-  ask "PROMPT" [--provider NAME] [--model ID] [--effort max]
+  ask "PROMPT" --workspace PATH [--provider NAME] [--model ID] [--effort max]
   ask --stdin                     Read a long prompt from standard input
-  delegate "TASK"                 Start a task and return its ID
+  delegate "TASK" --workspace PATH Start a task and return its ID and workspace
   wait TASK_ID [--timeout 60]      Return on question, approval or completion
   reply TASK_ID --request ID --answer '{"optionId":"..."}'
   reply TASK_ID --request ID --stdin  Read an answer JSON object from stdin
   install [--mcp]                 Install the minimal Codex skill; MCP is optional
   uninstall                       Remove this connector's skill and owned MCP entry
-  launch                          Start the local ZCode test instance
+  launch --workspace PATH         Start ZCode in an existing project directory
 
 Provider aliases: start-plan, bigmodel (full IDs from models also work).
 Omitted provider/model retain the current selection. Effort defaults to max.
 Common options: --json, --workspace ABSOLUTE_PATH, --port 9333, --help
+New tasks require --workspace or an explicit ZCODE_WORKSPACE. No default workspace.
 GLM-5.3: stronger, no vision. GLM-5.3-Flash: vision capable, weaker.
 The connector currently sends text only. wait timeout does not cancel a task.
 Optional MCP server: npm run mcp. Register it with install --mcp.
@@ -60,11 +62,12 @@ try {
     }
   } else {
     if (values.mcp !== undefined) throw new Error('--mcp is only valid for install')
-    const tools = { status: 'zcode_status', runs: 'zcode_runs', models: 'zcode_models', select: 'zcode_select_model', ask: 'zcode_ask', delegate: 'zcode_task', wait: 'zcode_task', reply: 'zcode_task' }
+    const tools = { workspaces: 'zcode_workspaces', status: 'zcode_status', runs: 'zcode_runs', models: 'zcode_models', select: 'zcode_select_model', ask: 'zcode_ask', delegate: 'zcode_task', wait: 'zcode_task', reply: 'zcode_task' }
     const name = tools[command]
     if (!name) throw new Error(`Unknown command: ${command}. Use --help.`)
     const args = {}
     for (const key of ['provider', 'model', 'effort']) if (values[key] !== undefined) args[key] = values[key]
+    if (values.workspace !== undefined && ['runs', 'select', 'ask', 'delegate', 'wait', 'reply'].includes(command)) args.workspace = values.workspace
     if (values.limit !== undefined) args.limit = Number(values.limit)
     if (values.quota !== undefined) args.quota = values.quota
     if (command === 'ask' || command === 'delegate') {

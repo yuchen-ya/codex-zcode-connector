@@ -17,7 +17,7 @@ const rpc = (method, params = {}) => ({ jsonrpc: '2.0', id: 1, method, params })
 
 test('MCP exposes the shared CLI capabilities and rejects removed installation tools', async () => {
   const list = await handleRequest(rpc('tools/list'), () => assert.fail('Discovery must not execute a tool'))
-  assert.deepEqual(list.result.tools.map(t => t.name), ['zcode_status', 'zcode_runs', 'zcode_models', 'zcode_select_model', 'zcode_ask', 'zcode_task'])
+  assert.deepEqual(list.result.tools.map(t => t.name), ['zcode_workspaces', 'zcode_status', 'zcode_runs', 'zcode_models', 'zcode_select_model', 'zcode_ask', 'zcode_task'])
   const removed = await handleRequest(rpc('tools/call', { name: 'zcode_install_skill' }), () => assert.fail('Removed tool executed'))
   assert.equal(removed.error.code, -32602)
 })
@@ -128,7 +128,7 @@ test('composer lock excludes a second Node process and releases after errors', a
 
 test('configuration keeps runtime outside source and replaces only the zcode tables', () => {
   const config = loadConfig({})
-  assert.equal(config.workspace, join(config.stateDir, 'workspace'))
+  assert.equal(config.workspace, null)
   assert.equal(config.tasksDir, join(config.stateDir, 'tasks'))
   assert.throws(() => loadConfig({ ZCODE_STATE_DIR: 'relative' }), /absolute/)
   assert.throws(() => loadConfig({ ZCODE_DEBUG_PORT: 'not-a-port' }), /ZCODE_DEBUG_PORT/)
@@ -136,6 +136,7 @@ test('configuration keeps runtime outside source and replaces only the zcode tab
   const before = 'model = "keep"\n\n[mcp_servers.other]\ncommand = "other"\n\n[mcp_servers.zcode]\ncommand = "old"\n[mcp_servers.zcode.env]\nZCODE_BRIDGE_PORT = "9444"\n\n[features]\nexample = true\n'
   const entry = codexEntry({ nodePath: process.execPath, serverPath: 'E:/path with spaces/mcp/server.mjs', workspace: config.workspace, home: config.home, debugPort: 9333 })
   const after = updateZCodeConfig(before, entry)
+  assert.equal(after.includes('ZCODE_WORKSPACE'), false)
   assert.ok(after.includes('[mcp_servers.other]\ncommand = "other"'))
   assert.ok(after.includes('[features]\nexample = true'))
   assert.equal((after.match(/\[mcp_servers\.zcode\]/g) ?? []).length, 1)

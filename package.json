@@ -1,6 +1,6 @@
 {
   "name": "codex-zcode-connector",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Delegate tasks from Codex to local ZCode with resumable questions, approvals and model selection.",
   "type": "module",
   "license": "MIT",
