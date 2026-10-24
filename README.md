@@ -5,7 +5,7 @@ Codex 委派 ZCode 执行任务，接收提问、授权和结果。Windows · No
 ## 安装
 
 ```powershell
-npm install -g https://github.com/yuchen-ya/codex-zcode-connector/releases/download/v0.5.0/codex-zcode-connector-0.5.0.tgz
+npm install -g https://github.com/yuchen-ya/codex-zcode-connector/releases/download/v0.5.1/codex-zcode-connector-0.5.1.tgz
 codex-zcode install
 codex-zcode launch --workspace 'E:\your-project'
 ```

@@ -44,7 +44,7 @@ async function call(name, args = {}) {
 }
 
 try {
-  const initialized = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex-zcode-smoke', version: '0.5.0' } })
+  const initialized = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex-zcode-smoke', version: '0.5.1' } })
   assert.equal(initialized.serverInfo.name, 'codex-zcode-connector')
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
   const tools = await request('tools/list')
