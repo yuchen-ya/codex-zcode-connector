@@ -8,6 +8,7 @@ import { installConnector, uninstallConnector } from './lib/install.js'
 const HELP = `codex-zcode - operate ZCode through local CDP
 
 Usage: node cli.mjs <command> [options]
+  inspect --json                  Read current models, permission, workspaces and limits
   workspaces                      List local ZCode projects and current workspace
   status [--quota]                 Local connection; optional cached quota, no account identity
   runs [--limit 15]               Current workspace's connector task records
@@ -62,10 +63,11 @@ try {
     }
   } else {
     if (values.mcp !== undefined) throw new Error('--mcp is only valid for install')
-    const tools = { workspaces: 'zcode_workspaces', status: 'zcode_status', runs: 'zcode_runs', models: 'zcode_models', select: 'zcode_select_model', ask: 'zcode_ask', delegate: 'zcode_task', wait: 'zcode_task', reply: 'zcode_task' }
+    const tools = { inspect: 'zcode_task', workspaces: 'zcode_workspaces', status: 'zcode_status', runs: 'zcode_runs', models: 'zcode_models', select: 'zcode_select_model', ask: 'zcode_ask', delegate: 'zcode_task', wait: 'zcode_task', reply: 'zcode_task' }
     const name = tools[command]
     if (!name) throw new Error(`Unknown command: ${command}. Use --help.`)
     const args = {}
+    if (command === 'inspect') args.action = 'inspect'
     for (const key of ['provider', 'model', 'effort']) if (values[key] !== undefined) args[key] = values[key]
     if (values.workspace !== undefined && ['runs', 'select', 'ask', 'delegate', 'wait', 'reply'].includes(command)) args.workspace = values.workspace
     if (values.limit !== undefined) args.limit = Number(values.limit)

@@ -44,7 +44,7 @@ async function call(name, args = {}) {
 }
 
 try {
-  const initialized = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex-zcode-smoke', version: '0.5.1' } })
+  const initialized = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'codex-zcode-smoke', version: '0.6.0' } })
   assert.equal(initialized.serverInfo.name, 'codex-zcode-connector')
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
   const tools = await request('tools/list')
@@ -53,6 +53,11 @@ try {
   console.log(status.content[0].text)
   const workspaces = await call('zcode_task', { action: 'workspaces' })
   console.log(`Workspaces: ${workspaces.structuredContent.workspaces.length} local projects`)
+  const inspection = (await call('zcode_task', { action: 'inspect' })).structuredContent
+  assert.ok(inspection.models.providers.length > 0)
+  assert.ok(inspection.permission.mode)
+  assert.ok(inspection.current.path)
+  console.log(`Inspection: ${inspection.models.providers.length} providers; permission=${inspection.permission.mode}; execution=${inspection.connector.taskExecution}`)
   if (config.workspace) {
     const runs = await call('zcode_runs', { workspace: config.workspace, limit: 3 })
     console.log(`Background snapshot: ${runs.structuredContent.agents.length} agent records returned`)

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import { validateInteractionAnswer } from '../lib/interactions.js'
 import { handleRequest } from '../lib/protocol.js'
@@ -105,7 +106,7 @@ test('task wait returns durable completion without a live connection and rejects
 })
 
 test('MCP validates task actions before execution', async () => {
-  for (const args of [{ action: 'start' }, { action: 'wait', taskId: '../bad' }, { action: 'wait', taskId: 'session_example', timeout: 61 }, { action: 'reply', taskId: 'session_example', requestId: 'r' }, { action: 'wait', taskId: 'session_example', prompt: 'wrong action' }]) {
+  for (const args of [{ action: 'start' }, { action: 'inspect', workspace: tmpdir() }, { action: 'wait', taskId: '../bad' }, { action: 'wait', taskId: 'session_example', timeout: 61 }, { action: 'reply', taskId: 'session_example', requestId: 'r' }, { action: 'wait', taskId: 'session_example', prompt: 'wrong action' }]) {
     const result = await handleRequest({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'zcode_task', arguments: args } }, () => assert.fail('Invalid action executed'))
     assert.equal(result.error.code, -32602)
   }
@@ -131,6 +132,7 @@ test('new tasks require an explicit workspace; nonexistent targets never become 
 test('MCP supports workspace discovery and per-call workspace selection', async () => {
   for (const [name, args] of [
     ['zcode_workspaces', {}],
+    ['zcode_task', { action: 'inspect' }],
     ['zcode_task', { action: 'workspaces' }],
     ['zcode_task', { action: 'start', prompt: 'test', workspace: tmpdir() }],
   ]) {
@@ -140,5 +142,84 @@ test('MCP supports workspace discovery and per-call workspace selection', async 
       return { text: 'ok', structured: {} }
     })
     assert.equal(result.result.isError, false)
+  }
+})
+
+test('inspection discovers live choices without changing the composer or exposing its contents', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'codex-zcode-inspect-'))
+  const snapshot = { sessionId: 'session_fixture', control: { canStop: true }, pendingInteractions: [{ payload: 'PRIVATE_QUESTION' }] }
+  const projectService = { readProjects: async () => [
+    { id: 'local-project', name: 'Project', hostId: 'local', roots: [{ isPrimary: true, rootPath: directory }] },
+    { id: 'removed', name: 'Deleted', hostId: 'local', deleted: true },
+    { id: 'remote', name: 'Remote', hostId: 'remote' },
+  ] }
+  const root = { memoizedProps: { workspacePath: directory, value: { projectService }, snapshot }, return: null }
+  const editor = { '__reactFiber$fixture': root, innerText: 'PRIVATE_DRAFT' }
+  const pane = { dataset: { sessionId: snapshot.sessionId } }
+  const marker = { dataset: { provider: 'fixture-provider', model: 'LIVE-MODEL', thought: 'high', thoughtLevels: 'low,high,max' } }
+  const modelTrigger = { '__reactFiber$fixture': { memoizedProps: { modelGroups: [
+    { key: 'registry-provider:fixture-provider', label: 'Live provider', items: [{ name: 'LIVE-MODEL', value: 'native-model-value', supportsVisionInput: true }] },
+  ] }, return: null } }
+  const permissionTrigger = { innerText: 'Require approval', '__reactFiber$fixture': { memoizedProps: { draftConfig: { mode: 'ask' } }, return: null } }
+  const elements = new Map([
+    ['div[role="textbox"][contenteditable="true"]', editor],
+    ['[data-testid="v4-session-pane-workspace-main"]', pane],
+    ['[data-testid="v4-model-config"][data-source="composer"]', marker],
+    ['[data-testid="chat-model-select-trigger"]', modelTrigger],
+    ['[data-testid="chat-mode-select-trigger"]', permissionTrigger],
+  ])
+  const context = { document: { querySelector: selector => elements.get(selector) } }
+  const commands = []
+  class ReadOnlySocket extends EventTarget {
+    readyState = 1
+    constructor() {
+      super()
+      queueMicrotask(() => this.dispatchEvent(new Event('open')))
+    }
+    send(message) {
+      const { id, method, params } = JSON.parse(message)
+      commands.push(method)
+      assert.equal(method, 'Runtime.evaluate', 'inspection must not send UI input or commands')
+      void (async () => {
+        const value = await runInNewContext(params.expression, context)
+        this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ id, result: { result: { value } } }) }))
+      })()
+    }
+    close() { this.readyState = 3; this.dispatchEvent(new Event('close')) }
+  }
+  t.mock.method(globalThis, 'fetch', async url => {
+    assert.equal(url, 'http://127.0.0.1:9333/json/list')
+    return { ok: true, json: async () => [{ type: 'page', url: 'file:///renderer/index.html', webSocketDebuggerUrl: 'ws://127.0.0.1:9333/renderer' }] }
+  })
+  const originalWebSocket = globalThis.WebSocket
+  globalThis.WebSocket = ReadOnlySocket
+  try {
+    const config = loadConfig({})
+    const { structured: result } = await callTool('zcode_task', { action: 'inspect' }, config)
+    assert.equal(result.current.path, directory)
+    assert.deepEqual(result.workspaces.map(project => project.id), ['local-project'])
+    assert.equal(result.models.providers[0].models[0].id, 'LIVE-MODEL')
+    assert.equal(result.models.providers[0].models[0].vision, true)
+    assert.deepEqual(result.permission, { mode: 'ask', label: 'Require approval' })
+    assert.equal(result.conversation.busy, true)
+    assert.equal(result.conversation.pendingInputCount, 1)
+    assert.equal(result.conversation.hasDraft, true)
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_|native-model-value/)
+    assert.equal(result.connector.taskExecution, 'serial')
+    pane.dataset.sessionId = 'draft'
+    editor.innerText = ''
+    root.memoizedProps.composerDraft = { attachments: ['PRIVATE_ATTACHMENT'] }
+    permissionTrigger.__reactFiber$fixture.memoizedProps.draftConfig.mode = 'yolo'
+    permissionTrigger.innerText = 'Full access'
+    const draft = (await callTool('zcode_task', { action: 'inspect' }, config)).structured
+    assert.deepEqual(draft.permission, { mode: 'yolo', label: 'Full access' }, 'draft inspection must report actual permission')
+    assert.equal(draft.conversation.busy, false)
+    assert.equal(draft.conversation.hasDraft, true, 'attachment-only drafts must be reported')
+    assert.equal(editor.innerText, '')
+    assert.deepEqual(root.memoizedProps.composerDraft.attachments, ['PRIVATE_ATTACHMENT'])
+    assert.ok(commands.length > 0)
+  } finally {
+    globalThis.WebSocket = originalWebSocket
+    rmSync(directory, { recursive: true })
   }
 })
